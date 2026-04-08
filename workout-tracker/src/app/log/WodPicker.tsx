@@ -85,6 +85,9 @@ export function WodPicker({ wods, onSelect }: Props) {
                   </span>
                   <IntensityDots level={wod.intensity} />
                 </div>
+                <p className="text-xs text-[var(--muted-foreground)] mt-1 truncate">
+                  {wod.movements.join(' • ')}
+                </p>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">

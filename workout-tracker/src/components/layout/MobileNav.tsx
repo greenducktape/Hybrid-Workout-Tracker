@@ -2,14 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Dumbbell, TrendingUp, Brain, Settings } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, TrendingUp, Calendar, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
   { href: '/log', label: 'Log', icon: Dumbbell },
+  { href: '/program/sbs', label: 'Plan', icon: Calendar },
   { href: '/progress', label: 'Progress', icon: TrendingUp },
-  { href: '/coach', label: 'Coach', icon: Brain },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 

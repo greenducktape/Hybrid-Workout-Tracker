@@ -197,7 +197,7 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
         }
       }
 
-      router.push('/dashboard')
+      router.push('/log/history')
     })
   }
 
@@ -284,10 +284,10 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
           </div>
           <div className="px-4 py-3 border-t border-[var(--border)]">
             <button
-              onClick={() => router.push('/dashboard')}
+              onClick={() => router.push('/log/history')}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold transition-colors"
             >
-              Back to Dashboard
+              Back to History
             </button>
           </div>
         </div>
