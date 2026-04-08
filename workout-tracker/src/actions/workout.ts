@@ -214,6 +214,40 @@ export async function getLastPerformances(
   return result
 }
 
+export async function updateSet(
+  setId: string,
+  data: {
+    weightKg?: number | null
+    reps?: number | null
+    rpe?: number | null
+    durationSeconds?: number | null
+    distanceMeters?: number | null
+    isAmrap?: boolean
+  }
+) {
+  const set = await prisma.setLog.update({ where: { id: setId }, data })
+
+  // Re-check PR if weight/reps changed
+  if (data.weightKg && data.reps) {
+    const estimated1RM = estimateOneRM(data.weightKg, data.reps) || undefined
+    if (estimated1RM) {
+      const existing = await prisma.personalRecord.findUnique({
+        where: { exerciseId_prType: { exerciseId: set.exerciseId, prType: 'ONE_RM' } },
+      })
+      if (!existing || estimated1RM > existing.value) {
+        await prisma.personalRecord.upsert({
+          where: { exerciseId_prType: { exerciseId: set.exerciseId, prType: 'ONE_RM' } },
+          create: { exerciseId: set.exerciseId, prType: 'ONE_RM', value: estimated1RM, weightKg: data.weightKg, achievedAt: new Date() },
+          update: { value: estimated1RM, weightKg: data.weightKg, achievedAt: new Date() },
+        })
+      }
+    }
+  }
+
+  revalidatePath('/progress')
+  return set
+}
+
 export async function deleteSession(sessionId: string) {
   await prisma.workoutSession.delete({ where: { id: sessionId } })
   revalidatePath('/dashboard')

@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBlock, logSet, saveMetConResult, completeSession } from '@/actions/workout'
+import { createBlock, logSet, updateSet, saveMetConResult, completeSession } from '@/actions/workout'
 import { recordSbsSessionResults } from '@/actions/sbs'
 import { estimateOneRM } from '@/lib/one-rm'
 import { cn, formatTime } from '@/lib/utils'
@@ -485,15 +485,7 @@ function SetRow({
     const rNum = parseInt(reps) || undefined
     if (wNum !== set.weightKg || rNum !== set.reps) {
       startTransition(async () => {
-        await logSet({
-          blockId,
-          exerciseId,
-          setNumber: set.setNumber,
-          weightKg: wNum,
-          reps: rNum,
-          isAmrap: set.isAmrap,
-          amrapTarget: set.amrapTarget ?? undefined,
-        })
+        await updateSet(set.id, { weightKg: wNum ?? null, reps: rNum ?? null })
         onUpdate({ weightKg: wNum ?? null, reps: rNum ?? null })
       })
     }

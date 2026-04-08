@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { WorkoutLogger } from './WorkoutLogger'
 import { getSbsSessionForWorkout } from '@/actions/sbs'
 import { getLastPerformances } from '@/actions/workout'
@@ -38,7 +38,8 @@ export default async function ActiveSessionPage({
     getSbsSessionForWorkout(sessionId),
   ])
 
-  if (!session) notFound()
+  if (!session) redirect('/log')
+  if (session.completedAt) redirect('/dashboard')
 
   // Fetch last performance for every exercise to pre-fill the logger
   const allExerciseIds = exercises.map((e) => e.id)
