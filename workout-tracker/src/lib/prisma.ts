@@ -19,6 +19,11 @@ function resolveDatabaseUrl(): string {
     if (!fs.existsSync(writableDbPath) && fs.existsSync(bundledDbPath)) {
       fs.copyFileSync(bundledDbPath, writableDbPath)
     }
+    if (!fs.existsSync(writableDbPath)) {
+      throw new Error(
+        'SQLite database file was not found in production bundle. Set DATABASE_URL or include prisma/dev.db in deployment output.',
+      )
+    }
     return `file:${writableDbPath}`
   }
 
