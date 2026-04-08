@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBlock, logSet, saveMetConResult, completeSession } from '@/actions/workout'
+import { createBlock, logSet, updateSet, completeSession } from '@/actions/workout'
 import { recordSbsSessionResults } from '@/actions/sbs'
 import { estimateOneRM } from '@/lib/one-rm'
 import { cn, formatTime } from '@/lib/utils'
@@ -353,8 +353,6 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
                   <SetRow
                     key={set.id}
                     set={set}
-                    blockId={block.id}
-                    exerciseId={exerciseId}
                     amrapTarget={set.isAmrap ? (set.amrapTarget ?? sbsTarget?.amrapTargetReps ?? null) : null}
                     sbsRefOneRM={sbsTarget?.refOneRM ?? null}
                     onUpdate={(updated) => {
@@ -473,15 +471,11 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
 
 function SetRow({
   set,
-  blockId,
-  exerciseId,
   amrapTarget,
   sbsRefOneRM,
   onUpdate,
 }: {
   set: SetLog
-  blockId: string
-  exerciseId: string
   /** If set, this is the AMRAP set — show beat/miss indicator */
   amrapTarget: number | null
   /**
@@ -507,10 +501,8 @@ function SetRow({
     const rNum = parseInt(reps) || undefined
     if (wNum !== set.weightKg || rNum !== set.reps) {
       startTransition(async () => {
-        await logSet({
-          blockId,
-          exerciseId,
-          setNumber: set.setNumber,
+        await updateSet({
+          setId: set.id,
           weightKg: wNum,
           reps: rNum,
           isAmrap: set.isAmrap,
