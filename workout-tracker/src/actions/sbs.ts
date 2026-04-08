@@ -151,6 +151,7 @@ const DEFAULT_SBS_SETTINGS: SbsProgramSettings = {
   deloadEvery7thWeek: false,
   accessorySwaps: {},
 }
+const SBS_ACCESSORY_SWAP_KEYS = ['day1_slot1', 'day1_slot2', 'day2_slot1', 'day3_slot1', 'day3_slot2'] as const
 
 const SBS_DAY_LAYOUT: Record<DayNumber, Array<{ defaultExercise: string; blockType: 'MAIN_LIFT' | 'ACCESSORY'; tracked?: boolean }>> = {
   1: [
@@ -189,13 +190,22 @@ export async function getSbsProgramSettings(): Promise<SbsProgramSettings> {
 
 export async function setSbsProgramSettings(patch: Partial<SbsProgramSettings>): Promise<void> {
   const current = await getSbsProgramSettings()
+  const incomingSwaps = patch.accessorySwaps ?? {}
+  const sanitizedSwaps: Record<string, string> = { ...current.accessorySwaps }
+  for (const key of SBS_ACCESSORY_SWAP_KEYS) {
+    if (!(key in incomingSwaps)) continue
+    const nextValue = incomingSwaps[key]?.trim()
+    if (nextValue) sanitizedSwaps[key] = nextValue
+    else delete sanitizedSwaps[key]
+  }
+
   const next: SbsProgramSettings = {
     ...current,
     ...patch,
-    accessorySwaps: {
-      ...current.accessorySwaps,
-      ...(patch.accessorySwaps ?? {}),
-    },
+    primarySets: Math.max(1, Math.round(patch.primarySets ?? current.primarySets)),
+    accessorySets: Math.max(1, Math.round(patch.accessorySets ?? current.accessorySets)),
+    deloadEvery7thWeek: patch.deloadEvery7thWeek ?? current.deloadEvery7thWeek,
+    accessorySwaps: sanitizedSwaps,
   }
   await setSetting('sbs_program_settings', JSON.stringify(next))
   revalidatePath('/program/sbs')
@@ -468,7 +478,7 @@ export async function startSbsSession(
           weightKg: s.weightKg > 0 ? s.weightKg : null,
           reps: s.repsTarget,
           isAmrap: s.isAmrap,
-          amrapTarget: s.isAmrap ? s.repsTarget : null,
+          amrapTarget: s.isAmrap ? ex.amrapTargetReps : null,
           completedAt: now,
         },
       })

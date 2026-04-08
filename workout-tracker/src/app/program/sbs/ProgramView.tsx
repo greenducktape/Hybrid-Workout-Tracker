@@ -15,6 +15,8 @@ interface Props {
   overview: SbsOverview
 }
 
+const ACCESSORY_SWAP_KEYS = ['day1_slot1', 'day1_slot2', 'day2_slot1', 'day3_slot1', 'day3_slot2'] as const
+
 export function ProgramView({ overview }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -47,10 +49,17 @@ export function ProgramView({ overview }: Props) {
   }
 
   function updateSettings(patch: Partial<typeof settings>) {
-    const next = { ...settings, ...patch }
+    const nextAccessorySwaps = {
+      ...settings.accessorySwaps,
+      ...(patch.accessorySwaps ?? {}),
+    }
+    for (const [key, value] of Object.entries(nextAccessorySwaps)) {
+      if (!value) delete nextAccessorySwaps[key]
+    }
+    const next = { ...settings, ...patch, accessorySwaps: nextAccessorySwaps }
     setSettings(next)
     startSettingsTransition(async () => {
-      await setSbsProgramSettings(patch)
+      await setSbsProgramSettings({ ...patch, accessorySwaps: patch.accessorySwaps ?? {} })
     })
   }
 
@@ -127,7 +136,7 @@ export function ProgramView({ overview }: Props) {
         </label>
         <div className="space-y-2">
           <p className="text-xs text-[var(--muted-foreground)]">Accessory swaps</p>
-          {['day1_slot1','day1_slot2','day2_slot1','day3_slot1','day3_slot2'].map((slotKey) => (
+          {ACCESSORY_SWAP_KEYS.map((slotKey) => (
             <label key={slotKey} className="flex items-center justify-between gap-2 text-xs">
               <span className="uppercase">{slotKey.replace('_', ' ')}</span>
               <select
