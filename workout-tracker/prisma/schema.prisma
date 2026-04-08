@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── Exercise Library ────────────────────────────────────────────────
+
+model Exercise {
+  id               String  @id @default(cuid())
+  name             String  @unique
+  slug             String  @unique
+  description      String?
+  type             String  // BARBELL, DUMBBELL, KETTLEBELL, BODYWEIGHT, CABLE, MACHINE, CARDIO, METCON
+  category         String  // COMPOUND, ACCESSORY, OLYMPIC, GYMNASTIC, CARDIO, METCON
+  movementPattern  String  // SQUAT, HINGE, HORIZONTAL_PUSH, VERTICAL_PUSH, HORIZONTAL_PULL, VERTICAL_PULL, CARRY, ROTATION, LOCOMOTION, OLYMPIC
+  primaryMuscles   String  // JSON string array e.g. '["quads","glutes"]'
+  secondaryMuscles String  @default("[]")
+  equipment        String  @default("[]")
+  isCustom         Boolean @default(false)
+  hevyTemplateId   String? @unique // Hevy exercise_template_id for matching
+  videoUrl         String?
+  cues             String?
+  createdAt        DateTime @default(now())
+
+  sets             SetLog[]
+  personalRecords  PersonalRecord[]
+  programExercises ProgramExercise[]
+  trainingMax      TrainingMax?
+  sbsPlannedExercises SbsPlannedExercise[]
+}
+
+// ─── Workout Sessions ────────────────────────────────────────────────
+
+model WorkoutSession {
+  id              String    @id @default(cuid())
+  date            DateTime  @default(now())
+  dayOfWeek       Int
+  phase           String    @default("BASE")
+  template        String?
+  notes           String?
+  perceivedEffort Int?
+  durationMinutes Int?
+  caloriesBurned  Int?
+  heartRateAvg    Int?
+  heartRateMax    Int?
+  completedAt     DateTime?
+  hevyId          String?   @unique // Hevy workout UUID for deduplication
+  source          String    @default("manual") // "manual" | "hevy"
+
+  blocks     WorkoutBlock[]
+  bodyMetric BodyMetric?
+  sbsSession SbsPlannedSession?
+}
+
+model WorkoutBlock {
+  id        String  @id @default(cuid())
+  sessionId String
+  order     Int
+  blockType String  // MAIN_LIFT, ACCESSORY, SUPERSET, METCON
+  notes     String?
+
+  session      WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sets         SetLog[]
+  metconResult MetConResult?
+}
+
+model SetLog {
+  id              String   @id @default(cuid())
+  blockId         String
+  exerciseId      String
+  setNumber       Int
+  weightKg        Float?
+  reps            Int?
+  rpe             Float?
+  durationSeconds Int?
+  distanceMeters  Float?
+  calories        Int?
+  isRx            Boolean  @default(true)
+  isAmrap         Boolean  @default(false)
+  amrapTarget     Int?     // rep target to beat (SBS last set)
+  scalingNote     String?
+  notes           String?
+  completedAt     DateTime @default(now())
+
+  block    WorkoutBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  exercise Exercise     @relation(fields: [exerciseId], references: [id])
+}
+
+// ─── MetCon Results ──────────────────────────────────────────────────
+
+model MetConResult {
+  id                String  @id @default(cuid())
+  blockId           String  @unique
+  wodName           String?
+  wodType           String  // AMRAP, EMOM, FOR_TIME, TABATA, CHIPPER, LADDER, DEATH_BY
+  timeCap           Int?
+  roundsCompleted   Int?
+  repsCompleted     Int?
+  completionSeconds Int?
+  dnf               Boolean @default(false)
+  completedRounds   Int?
+  isRx              Boolean @default(true)
+  scalingNote       String?
+  notes             String?
+
+  block WorkoutBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+}
+
+// ─── Personal Records ────────────────────────────────────────────────
+
+model PersonalRecord {
+  id         String   @id @default(cuid())
+  exerciseId String
+  prType     String   // ONE_RM, THREE_RM, FIVE_RM, TEN_RM, WOD_TIME, AMRAP_SCORE, DISTANCE_PR, PACE_PR
+  value      Float
+  weightKg   Float?
+  isRx       Boolean  @default(true)
+  achievedAt DateTime
+  sessionId  String?
+  notes      String?
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id])
+
+  @@unique([exerciseId, prType])
+}
+
+// ─── Program Planning ────────────────────────────────────────────────
+
+model TrainingProgram {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  phase       String
+  weeksTotal  Int
+  startDate   DateTime
+  endDate     DateTime?
+  isActive    Boolean   @default(false)
+
+  weeks       ProgramWeek[]
+  competition Competition?
+}
+
+model ProgramWeek {
+  id            String  @id @default(cuid())
+  programId     String
+  weekNumber    Int
+  focus         String?
+  volumePercent Float   @default(100)
+
+  program TrainingProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  days    ProgramDay[]
+}
+
+model ProgramDay {
+  id          String  @id @default(cuid())
+  weekId      String
+  dayOfWeek   Int
+  sessionType String?
+  notes       String?
+
+  week      ProgramWeek       @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  exercises ProgramExercise[]
+}
+
+model ProgramExercise {
+  id            String  @id @default(cuid())
+  dayId         String
+  exerciseId    String
+  order         Int
+  blockType     String
+  setScheme     String
+  intensityNote String?
+  superset      String?
+
+  day      ProgramDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  exercise Exercise   @relation(fields: [exerciseId], references: [id])
+}
+
+// ─── Competition Goals ───────────────────────────────────────────────
+
+model Competition {
+  id        String    @id @default(cuid())
+  name      String
+  date      DateTime
+  type      String
+  goals     String?
+  programId String?   @unique
+  notes     String?
+
+  program TrainingProgram? @relation(fields: [programId], references: [id])
+}
+
+// ─── Body Metrics ────────────────────────────────────────────────────
+
+model BodyMetric {
+  id               String   @id @default(cuid())
+  date             DateTime @default(now())
+  bodyWeightKg     Float?
+  bodyFatPercent   Float?
+  heartRateResting Int?
+  sleepHours       Float?
+  energyLevel      Int?
+  notes            String?
+  sessionId        String?  @unique
+
+  session WorkoutSession? @relation(fields: [sessionId], references: [id])
+}
+
+// ─── App Settings ────────────────────────────────────────────────────
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ─── SBS "Beat the Logbook" Engine ───────────────────────────────────
+
+// Current training max per exercise (basis for all weight prescriptions)
+model TrainingMax {
+  id             String   @id @default(cuid())
+  exerciseId     String   @unique
+  oneRmKg        Float    // athlete's current estimated 1RM
+  trainingMaxKg  Float    // working TM used for prescriptions (≈85-90% of 1RM)
+  consecutiveMisses Int   @default(0) // triggers deload at 2
+  updatedAt      DateTime @updatedAt
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id])
+}
+
+// A generated planned session (one "day" from the program template)
+model SbsPlannedSession {
+  id               String    @id @default(cuid())
+  dayLabel         String    // "Day A" | "Day B"
+  sessionNumber    Int       // cumulative session count (1, 2, 3, ...)
+  scheduledFor     DateTime?
+  completedAt      DateTime?
+  workoutSessionId String?   @unique
+  createdAt        DateTime  @default(now())
+
+  workoutSession WorkoutSession?    @relation(fields: [workoutSessionId], references: [id])
+  exercises      SbsPlannedExercise[]
+}
+
+// Each exercise within a planned session, with full prescription
+model SbsPlannedExercise {
+  id               String  @id @default(cuid())
+  plannedSessionId String
+  exerciseId       String
+  order            Int
+  blockType        String  // MAIN_LIFT | ACCESSORY
+
+  sets            Int     // number of sets (last one is AMRAP)
+  repsTarget      Int     // reps to hit on all working sets
+  weightKg        Float   // prescribed weight (already rounded to 2.5kg)
+  amrapTargetReps Int     // reps to beat on last set for progression
+  incrementKg     Float   // kg added to TM when progression triggers
+
+  // Results — filled in after session
+  amrapActualReps      Int?
+  progressionTriggered Boolean?
+
+  plannedSession SbsPlannedSession @relation(fields: [plannedSessionId], references: [id], onDelete: Cascade)
+  exercise       Exercise          @relation(fields: [exerciseId], references: [id])
+}
