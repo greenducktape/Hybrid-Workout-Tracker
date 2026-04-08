@@ -388,7 +388,10 @@ function generateDynamicSession(
       ? signal.effectiveTrainingMaxKg
       : tm
     const tmAvailable = effectiveTM != null && effectiveTM > 0
-    const weightKg = tmAvailable ? calcPrescribedWeight(effectiveTM, target.intensity / 100) : 0
+    // `target.intensity` is expressed as % of 1RM from the SBS table.
+    // Our base scalar is TM (≈90% of 1RM), so convert %1RM -> %TM.
+    const tmPercent = target.intensity / 90
+    const weightKg = tmAvailable ? calcPrescribedWeight(effectiveTM, tmPercent) : 0
     return {
       exerciseName,
       blockType: slot.blockType,
