@@ -361,6 +361,7 @@ function generateDynamicSession(
   tmMap: Record<string, number>,
   weekNumber: number,
   settings: SbsProgramSettings,
+  signals: Record<string, ExerciseSignal> = {},
 ) {
   const profile = getWeekProfile(weekNumber, settings.deloadEvery7thWeek)
   const exercises = SBS_DAY_LAYOUT[day].map((slot, index) => {
@@ -370,10 +371,24 @@ function generateDynamicSession(
       : slot.defaultExercise
     const isMain = slot.blockType === 'MAIN_LIFT'
     const sets = isMain ? settings.primarySets : settings.accessorySets
-    const target = isMain ? profile.main : profile.accessory
+    const signal = signals[exerciseName]
+    const inferredIntensity = inferNextIntensity({
+      latestIntensity: signal?.latestIntensity,
+      previousIntensity: signal?.previousIntensity,
+      amrapDelta: signal?.latestAmrapDelta,
+      includeDeload: settings.deloadEvery7thWeek,
+      isMain,
+    })
+    const target = {
+      ...(isMain ? profile.main : profile.accessory),
+      intensity: inferredIntensity ?? (isMain ? profile.main.intensity : profile.accessory.intensity),
+    }
     const tm = tmMap[exerciseName]
-    const tmAvailable = tm != null && tm > 0
-    const weightKg = tmAvailable ? calcPrescribedWeight(tm, target.intensity / 100) : 0
+    const effectiveTM = signal?.effectiveTrainingMaxKg && signal.effectiveTrainingMaxKg > 0
+      ? signal.effectiveTrainingMaxKg
+      : tm
+    const tmAvailable = effectiveTM != null && effectiveTM > 0
+    const weightKg = tmAvailable ? calcPrescribedWeight(effectiveTM, target.intensity / 100) : 0
     return {
       exerciseName,
       blockType: slot.blockType,
@@ -392,6 +407,105 @@ function generateDynamicSession(
     }
   })
   return { dayNumber: day, label: `Day ${day}`, exercises }
+}
+
+interface ExerciseSignal {
+  latestIntensity?: number
+  previousIntensity?: number
+  latestAmrapDelta?: number
+  effectiveTrainingMaxKg?: number
+}
+
+function buildIntensityCurve(includeDeload: boolean, isMain: boolean, length = 30): number[] {
+  return Array.from({ length }, (_, i) => {
+    const p = getWeekProfile(i + 1, includeDeload)
+    return isMain ? p.main.intensity : p.accessory.intensity
+  })
+}
+
+function isClose(a: number, b: number, epsilon = 0.6): boolean {
+  return Math.abs(a - b) <= epsilon
+}
+
+function inferNextIntensity(params: {
+  latestIntensity?: number
+  previousIntensity?: number
+  amrapDelta?: number
+  includeDeload: boolean
+  isMain: boolean
+}): number | null {
+  const { latestIntensity, previousIntensity, amrapDelta, includeDeload, isMain } = params
+  if (!latestIntensity) return null
+
+  const curve = buildIntensityCurve(includeDeload, isMain)
+  let latestIndex = curve.findIndex((v, idx) => {
+    if (!isClose(v, latestIntensity)) return false
+    if (previousIntensity == null || idx === 0) return true
+    return isClose(curve[idx - 1], previousIntensity)
+  })
+  if (latestIndex < 0) {
+    latestIndex = curve.reduce((best, v, idx) =>
+      Math.abs(v - latestIntensity) < Math.abs(curve[best] - latestIntensity) ? idx : best, 0)
+  }
+
+  let nextIndex = Math.min(curve.length - 1, latestIndex + 1)
+  if ((amrapDelta ?? 0) >= 1.5) nextIndex = Math.min(curve.length - 1, nextIndex + 1)
+  if ((amrapDelta ?? 0) <= -2) nextIndex = Math.max(0, nextIndex - 1)
+  return curve[nextIndex]
+}
+
+async function getExerciseSignals(
+  exerciseNames: string[],
+  tmMap: Record<string, number>,
+): Promise<Record<string, ExerciseSignal>> {
+  if (exerciseNames.length === 0) return {}
+  const rows = await prisma.sbsPlannedExercise.findMany({
+    where: {
+      exercise: { name: { in: exerciseNames } },
+      plannedSession: { completedAt: { not: null } },
+    },
+    include: {
+      exercise: { select: { name: true } },
+      plannedSession: { select: { sessionNumber: true } },
+    },
+    orderBy: { plannedSession: { sessionNumber: 'desc' } },
+    take: 80,
+  })
+
+  const byExercise: Record<string, typeof rows> = {}
+  for (const row of rows) {
+    const name = row.exercise.name
+    byExercise[name] = byExercise[name] ? [...byExercise[name], row] : [row]
+  }
+
+  const signals: Record<string, ExerciseSignal> = {}
+  for (const name of exerciseNames) {
+    const list = (byExercise[name] ?? []).slice(0, 2)
+    const tm = tmMap[name]
+    const refOneRM = tm ? tm / 0.9 : 0
+    const latest = list[0]
+    const previous = list[1]
+
+    const latestIntensity = latest && refOneRM > 0 ? (latest.weightKg / refOneRM) * 100 : undefined
+    const previousIntensity = previous && refOneRM > 0 ? (previous.weightKg / refOneRM) * 100 : undefined
+
+    let latestAmrapDelta: number | undefined
+    if (latest?.amrapActualReps != null) {
+      latestAmrapDelta = PROGRESSION_DELTAS[getProgressOutcome(latest.amrapTargetReps, latest.amrapActualReps)]
+    }
+
+    let effectiveTrainingMaxKg: number | undefined
+    if (latest?.amrapActualReps != null && latest.weightKg > 0) {
+      const est1RM = estimateOneRM(latest.weightKg, latest.amrapActualReps)
+      if (est1RM > 0 && tm > 0) {
+        const tmFromLatest = calcInitialTM(est1RM)
+        effectiveTrainingMaxKg = roundToPlate(tm * 0.7 + tmFromLatest * 0.3)
+      }
+    }
+
+    signals[name] = { latestIntensity, previousIntensity, latestAmrapDelta, effectiveTrainingMaxKg }
+  }
+  return signals
 }
 
 // ─── Session start ────────────────────────────────────────────────────
@@ -422,7 +536,13 @@ export async function startSbsSession(
     tmMap[tm.exerciseName] = tm.trainingMaxKg
   }
 
-  const generated = generateDynamicSession(day, tmMap, weekNumber, settings)
+  const dayExerciseNames = SBS_DAY_LAYOUT[day].map((slot, idx) =>
+    slot.blockType === 'ACCESSORY'
+      ? settings.accessorySwaps[`day${day}_slot${idx + 1}`] ?? slot.defaultExercise
+      : slot.defaultExercise
+  )
+  const signals = await getExerciseSignals(dayExerciseNames, tmMap)
+  const generated = generateDynamicSession(day, tmMap, weekNumber, settings, signals)
 
   const now = new Date()
   const workoutSession = await prisma.workoutSession.create({
@@ -632,7 +752,13 @@ export async function getSbsOverview(): Promise<SbsOverview> {
   for (const dayNum of [1, 2, 3] as DayNumber[]) {
     const offset = dayNum >= nextDay ? dayNum - nextDay : 3 - (nextDay - dayNum)
     const weekForDay = getWeekNumberFromSessionNumber(nextSessionNumber + offset)
-    const generated = generateDynamicSession(dayNum, tmMap, weekForDay, settings)
+    const dayExerciseNames = SBS_DAY_LAYOUT[dayNum].map((slot, idx) =>
+      slot.blockType === 'ACCESSORY'
+        ? settings.accessorySwaps[`day${dayNum}_slot${idx + 1}`] ?? slot.defaultExercise
+        : slot.defaultExercise
+    )
+    const signals = await getExerciseSignals(dayExerciseNames, tmMap)
+    const generated = generateDynamicSession(dayNum, tmMap, weekForDay, settings, signals)
 
     // Last completed session for this day type
     const lastCompleted = await prisma.sbsPlannedSession.findFirst({
