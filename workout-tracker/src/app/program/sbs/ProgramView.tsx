@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { startSbsSession, setTrainingMax, setTrainingGoal } from '@/actions/sbs'
+import { startSbsSession, setSbsProgramSettings, setTrainingMax, setTrainingGoal } from '@/actions/sbs'
 import type { SbsOverview } from '@/actions/sbs'
 import type { DayNumber, TrainingGoal } from '@/lib/sbs-engine'
 import {
@@ -22,6 +22,8 @@ export function ProgramView({ overview }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [goal, setGoalState] = useState<TrainingGoal>(overview.trainingGoal)
   const [goalPending, startGoalTransition] = useTransition()
+  const [settings, setSettings] = useState(overview.settings)
+  const [settingsPending, startSettingsTransition] = useTransition()
 
   function handleGoalChange(newGoal: TrainingGoal) {
     setGoalState(newGoal)
@@ -44,6 +46,14 @@ export function ProgramView({ overview }: Props) {
     })
   }
 
+  function updateSettings(patch: Partial<typeof settings>) {
+    const next = { ...settings, ...patch }
+    setSettings(next)
+    startSettingsTransition(async () => {
+      await setSbsProgramSettings(patch)
+    })
+  }
+
   return (
     <div className="space-y-4">
       {/* Missing lifts warning */}
@@ -54,7 +64,7 @@ export function ProgramView({ overview }: Props) {
             <p className="font-medium text-amber-400 mb-1">No history found for:</p>
             <p className="text-[var(--muted-foreground)]">{overview.missingLifts.join(', ')}</p>
             <p className="text-xs text-[var(--muted-foreground)] mt-1">
-              Log a few sets for these lifts and they'll auto-populate next time.
+              Log a few sets for these lifts and they&apos;ll auto-populate next time.
             </p>
           </div>
         </div>
@@ -86,6 +96,51 @@ export function ProgramView({ overview }: Props) {
               </p>
               <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{opt.desc}</p>
             </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">Program Settings (Week {overview.nextWeekNumber})</p>
+          {settingsPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--muted-foreground)]" />}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-[var(--muted-foreground)]">Primary sets
+            <input type="number" min={1} max={8} value={settings.primarySets}
+              onChange={(e) => updateSettings({ primarySets: Number(e.target.value) || 4 })}
+              className="mt-1 w-full bg-[var(--muted)] rounded-lg px-2 py-1 text-sm" />
+          </label>
+          <label className="text-xs text-[var(--muted-foreground)]">Accessory sets
+            <input type="number" min={1} max={8} value={settings.accessorySets}
+              onChange={(e) => updateSettings({ accessorySets: Number(e.target.value) || 3 })}
+              className="mt-1 w-full bg-[var(--muted)] rounded-lg px-2 py-1 text-sm" />
+          </label>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.deloadEvery7thWeek}
+            onChange={(e) => updateSettings({ deloadEvery7thWeek: e.target.checked })}
+          />
+          Deload every 7th week
+        </label>
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--muted-foreground)]">Accessory swaps</p>
+          {['day1_slot1','day1_slot2','day2_slot1','day3_slot1','day3_slot2'].map((slotKey) => (
+            <label key={slotKey} className="flex items-center justify-between gap-2 text-xs">
+              <span className="uppercase">{slotKey.replace('_', ' ')}</span>
+              <select
+                value={settings.accessorySwaps[slotKey] ?? ''}
+                onChange={(e) => updateSettings({ accessorySwaps: { [slotKey]: e.target.value } })}
+                className="bg-[var(--muted)] rounded px-2 py-1 text-xs max-w-56"
+              >
+                <option value="">Default</option>
+                {overview.accessoryOptions.map((opt) => (
+                  <option key={opt.id} value={opt.name}>{opt.name}</option>
+                ))}
+              </select>
+            </label>
           ))}
         </div>
       </div>
