@@ -123,6 +123,7 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
   }
 
   async function addSet(blockId: string, exerciseId: string, exerciseName: string) {
+    if (!exerciseId) return
     const block = session.blocks.find((b) => b.id === blockId)
     if (!block) return
     const lastSet = block.sets[block.sets.length - 1]
@@ -301,6 +302,7 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
           const intensityPercent = sbsTarget?.refOneRM
             ? Math.round((sbsTarget.weightKg / sbsTarget.refOneRM) * 1000) / 10
             : null
+          const isWodMetcon = block.blockType === 'METCON' && !exerciseId
 
           return (
             <div key={block.id} className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
@@ -310,7 +312,9 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
                   <span className={cn('text-xs font-semibold px-2 py-0.5 rounded', blockTypeColors[block.blockType])}>
                     {blockTypeLabels[block.blockType]}
                   </span>
-                  <span className="font-medium text-sm">{exerciseName}</span>
+                  <span className="font-medium text-sm">
+                    {exerciseName || block.metconResult?.wodName || 'MetCon'}
+                  </span>
                 </div>
                 {sbsTarget && (
                   <div className="flex items-center gap-1 text-xs text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full">
@@ -323,7 +327,16 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
                 )}
               </div>
 
-              {/* Sets table */}
+              {/* WOD-only MetCon block */}
+              {isWodMetcon ? (
+                <div className="px-4 py-3 text-sm text-[var(--muted-foreground)]">
+                  <p>WOD session ready. Use the <span className="text-[var(--foreground)] font-medium">Finish</span> button when done.</p>
+                  {block.metconResult?.wodType && (
+                    <p className="mt-1 text-xs">Type: {block.metconResult.wodType}</p>
+                  )}
+                </div>
+              ) : (
+              /* Sets table */
               <div className="px-4 py-2">
                 {/* Header row */}
                 <div className="grid grid-cols-[32px_1fr_1fr_80px_32px] gap-2 text-xs text-[var(--muted-foreground)] mb-1 px-1">
@@ -358,18 +371,21 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
                   />
                 ))}
               </div>
+              )}
 
               {/* Add set */}
-              <div className="px-4 pb-3">
-                <button
-                  onClick={() => addSet(block.id, exerciseId, exerciseName)}
-                  disabled={isPending}
-                  className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-medium py-1 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Set
-                </button>
-              </div>
+              {!isWodMetcon && (
+                <div className="px-4 pb-3">
+                  <button
+                    onClick={() => addSet(block.id, exerciseId, exerciseName)}
+                    disabled={isPending}
+                    className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-medium py-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Set
+                  </button>
+                </div>
+              )}
             </div>
           )
         })}
