@@ -298,6 +298,9 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
           const exerciseId = block.sets[0]?.exercise.id ?? ''
           const exerciseName = block.sets[0]?.exercise.name ?? ''
           const sbsTarget = sbsTargets?.[exerciseId]
+          const intensityPercent = sbsTarget?.refOneRM
+            ? Math.round((sbsTarget.weightKg / sbsTarget.refOneRM) * 1000) / 10
+            : null
 
           return (
             <div key={block.id} className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
@@ -313,6 +316,9 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
                   <div className="flex items-center gap-1 text-xs text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full">
                     <Target className="w-3 h-3" />
                     Target: {sbsTarget.weightKg}kg × {sbsTarget.repsTarget}+
+                    {intensityPercent !== null && (
+                      <span className="text-[10px] text-orange-300">(@ {intensityPercent}% 1RM)</span>
+                    )}
                   </div>
                 )}
               </div>
