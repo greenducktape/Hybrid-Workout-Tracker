@@ -112,6 +112,36 @@ export async function logSet(data: {
   return { set, newPR, estimated1RM }
 }
 
+export async function updateSet(data: {
+  setId: string
+  weightKg?: number
+  reps?: number
+  rpe?: number
+  durationSeconds?: number
+  distanceMeters?: number
+  isAmrap?: boolean
+  amrapTarget?: number
+  scalingNote?: string
+  notes?: string
+}) {
+  const set = await prisma.setLog.update({
+    where: { id: data.setId },
+    data: {
+      weightKg: data.weightKg,
+      reps: data.reps,
+      rpe: data.rpe,
+      durationSeconds: data.durationSeconds,
+      distanceMeters: data.distanceMeters,
+      isAmrap: data.isAmrap,
+      amrapTarget: data.amrapTarget,
+      scalingNote: data.scalingNote,
+      notes: data.notes,
+    },
+  })
+  revalidatePath('/log')
+  return set
+}
+
 export async function saveMetConResult(data: {
   blockId: string
   wodName?: string

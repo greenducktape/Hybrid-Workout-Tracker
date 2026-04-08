@@ -6,9 +6,8 @@ import {
   LayoutDashboard,
   Dumbbell,
   TrendingUp,
-  Brain,
-  BookOpen,
   Calendar,
+  Clock,
   Zap,
   Settings,
 } from 'lucide-react'
@@ -17,10 +16,9 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/log', label: 'Log Workout', icon: Dumbbell },
+  { href: '/program/sbs', label: 'SBS Plan', icon: Calendar },
+  { href: '/log/history', label: 'History', icon: Clock },
   { href: '/progress', label: 'Progress', icon: TrendingUp },
-  { href: '/coach', label: 'AI Coach', icon: Brain },
-  { href: '/exercises', label: 'Exercises', icon: BookOpen },
-  { href: '/program', label: 'Program', icon: Calendar },
 ]
 
 export function Sidebar() {

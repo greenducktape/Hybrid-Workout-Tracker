@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBlock, logSet, saveMetConResult, completeSession } from '@/actions/workout'
+import { createBlock, logSet, updateSet, completeSession } from '@/actions/workout'
 import { recordSbsSessionResults } from '@/actions/sbs'
 import { estimateOneRM } from '@/lib/one-rm'
 import { cn, formatTime } from '@/lib/utils'
@@ -123,6 +123,7 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
   }
 
   async function addSet(blockId: string, exerciseId: string, exerciseName: string) {
+    if (!exerciseId) return
     const block = session.blocks.find((b) => b.id === blockId)
     if (!block) return
     const lastSet = block.sets[block.sets.length - 1]
@@ -196,7 +197,7 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
         }
       }
 
-      router.push('/dashboard')
+      router.push('/log/history')
     })
   }
 
@@ -283,10 +284,10 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
           </div>
           <div className="px-4 py-3 border-t border-[var(--border)]">
             <button
-              onClick={() => router.push('/dashboard')}
+              onClick={() => router.push('/log/history')}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold transition-colors"
             >
-              Back to Dashboard
+              Back to History
             </button>
           </div>
         </div>
@@ -298,6 +299,10 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
           const exerciseId = block.sets[0]?.exercise.id ?? ''
           const exerciseName = block.sets[0]?.exercise.name ?? ''
           const sbsTarget = sbsTargets?.[exerciseId]
+          const intensityPercent = sbsTarget?.refOneRM
+            ? Math.round((sbsTarget.weightKg / sbsTarget.refOneRM) * 1000) / 10
+            : null
+          const isWodMetcon = block.blockType === 'METCON' && !exerciseId
 
           return (
             <div key={block.id} className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
@@ -307,17 +312,31 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
                   <span className={cn('text-xs font-semibold px-2 py-0.5 rounded', blockTypeColors[block.blockType])}>
                     {blockTypeLabels[block.blockType]}
                   </span>
-                  <span className="font-medium text-sm">{exerciseName}</span>
+                  <span className="font-medium text-sm">
+                    {exerciseName || block.metconResult?.wodName || 'MetCon'}
+                  </span>
                 </div>
                 {sbsTarget && (
                   <div className="flex items-center gap-1 text-xs text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full">
                     <Target className="w-3 h-3" />
                     Target: {sbsTarget.weightKg}kg × {sbsTarget.repsTarget}+
+                    {intensityPercent !== null && (
+                      <span className="text-[10px] text-orange-300">(@ {intensityPercent}% 1RM)</span>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Sets table */}
+              {/* WOD-only MetCon block */}
+              {isWodMetcon ? (
+                <div className="px-4 py-3 text-sm text-[var(--muted-foreground)]">
+                  <p>WOD session ready. Use the <span className="text-[var(--foreground)] font-medium">Finish</span> button when done.</p>
+                  {block.metconResult?.wodType && (
+                    <p className="mt-1 text-xs">Type: {block.metconResult.wodType}</p>
+                  )}
+                </div>
+              ) : (
+              /* Sets table */
               <div className="px-4 py-2">
                 {/* Header row */}
                 <div className="grid grid-cols-[32px_1fr_1fr_80px_32px] gap-2 text-xs text-[var(--muted-foreground)] mb-1 px-1">
@@ -334,8 +353,6 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
                   <SetRow
                     key={set.id}
                     set={set}
-                    blockId={block.id}
-                    exerciseId={exerciseId}
                     amrapTarget={set.isAmrap ? (set.amrapTarget ?? sbsTarget?.amrapTargetReps ?? null) : null}
                     sbsRefOneRM={sbsTarget?.refOneRM ?? null}
                     onUpdate={(updated) => {
@@ -352,18 +369,21 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
                   />
                 ))}
               </div>
+              )}
 
               {/* Add set */}
-              <div className="px-4 pb-3">
-                <button
-                  onClick={() => addSet(block.id, exerciseId, exerciseName)}
-                  disabled={isPending}
-                  className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-medium py-1 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Set
-                </button>
-              </div>
+              {!isWodMetcon && (
+                <div className="px-4 pb-3">
+                  <button
+                    onClick={() => addSet(block.id, exerciseId, exerciseName)}
+                    disabled={isPending}
+                    className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-medium py-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Set
+                  </button>
+                </div>
+              )}
             </div>
           )
         })}
@@ -451,15 +471,11 @@ export function WorkoutLogger({ session: initialSession, exercises, lastPerforma
 
 function SetRow({
   set,
-  blockId,
-  exerciseId,
   amrapTarget,
   sbsRefOneRM,
   onUpdate,
 }: {
   set: SetLog
-  blockId: string
-  exerciseId: string
   /** If set, this is the AMRAP set — show beat/miss indicator */
   amrapTarget: number | null
   /**
@@ -485,10 +501,8 @@ function SetRow({
     const rNum = parseInt(reps) || undefined
     if (wNum !== set.weightKg || rNum !== set.reps) {
       startTransition(async () => {
-        await logSet({
-          blockId,
-          exerciseId,
-          setNumber: set.setNumber,
+        await updateSet({
+          setId: set.id,
           weightKg: wNum,
           reps: rNum,
           isAmrap: set.isAmrap,

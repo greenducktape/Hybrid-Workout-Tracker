@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { formatDuration } from '@/lib/utils'
 import { Dumbbell, Clock, Zap } from 'lucide-react'
+import { deleteSession } from '@/actions/workout'
 
 export default async function HistoryPage() {
   const sessions = await prisma.workoutSession.findMany({
@@ -45,16 +46,15 @@ export default async function HistoryPage() {
               .map((b) => b.metconResult!.wodName ?? b.metconResult!.wodType)
 
             return (
-              <Link
+              <div
                 key={session.id}
-                href={`/log/${session.id}`}
                 className="flex items-center justify-between p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl hover:border-blue-500/30 transition-colors"
               >
-                <div className="flex items-center gap-3">
+                <Link href={`/log/${session.id}`} className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-10 h-10 rounded-lg bg-[var(--muted)] flex items-center justify-center shrink-0">
                     <Dumbbell className="w-5 h-5 text-blue-400" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium text-sm">
                       {session.template ?? mainLifts.join(' + ') ?? 'Workout'}
                     </p>
@@ -71,8 +71,8 @@ export default async function HistoryPage() {
                       )}
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-[var(--muted-foreground)]">
+                </Link>
+                <div className="flex items-center gap-3 text-xs text-[var(--muted-foreground)] ml-3">
                   {session.durationMinutes && (
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
@@ -85,8 +85,17 @@ export default async function HistoryPage() {
                       RPE {session.perceivedEffort}
                     </div>
                   )}
+                  <form action={deleteSession.bind(null, session.id)}>
+                    <button
+                      type="submit"
+                      className="text-red-400 hover:text-red-300 text-xs font-medium"
+                      title="Delete workout"
+                    >
+                      Delete
+                    </button>
+                  </form>
                 </div>
-              </Link>
+              </div>
             )
           })}
         </div>
